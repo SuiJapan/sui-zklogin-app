@@ -328,7 +328,12 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
         // バックエンドのHKDFから salt を取得
         const token = oauthParams?.id_token as string;
         const res = await axios.post<{ salt: string }>("/hkdf", { token });
-        setUserSalt(res.data.salt);
+        const rawSalt = res.data.salt;
+        // HKDFがhexを返す場合に備えて10進文字列へ正規化
+        const normalizedSalt = /^[0-9a-fA-F]+$/.test(rawSalt)
+          ? BigInt(`0x${rawSalt}`).toString()
+          : String(rawSalt);
+        setUserSalt(normalizedSalt);
         // maxEpoch は最新エポックに基づき計算
         const { epoch } = await suiClient.getLatestSuiSystemState();
         setMaxEpoch(Number(epoch) + 10);
