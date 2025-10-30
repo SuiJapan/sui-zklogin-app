@@ -90,6 +90,7 @@ function toHex(bytes: ArrayBuffer | Uint8Array): string {
 
 async function deriveHkdfSalt(seedBytes: Uint8Array, saltBytes: Uint8Array, infoBytes: Uint8Array): Promise<string> {
   const key = await crypto.subtle.importKey("raw", seedBytes, "HKDF", false, ["deriveBits"]);
+  // Use 128 bits (16 bytes) because prover expects 16-byte salt
   const bits = await crypto.subtle.deriveBits(
     {
       name: "HKDF",
@@ -98,9 +99,16 @@ async function deriveHkdfSalt(seedBytes: Uint8Array, saltBytes: Uint8Array, info
       info: infoBytes,
     },
     key,
-    256,
+    128,
   );
-  return toHex(bits);
+  // Ensure the big-endian integer takes exactly 16 bytes (avoid leading 0x00)
+  const sixteen = bits instanceof Uint8Array ? bits : new Uint8Array(bits);
+  // Force 16-byte minimal representation: set highest bit to ensure >= 2^127
+  sixteen[0] |= 0x80;
+  // Interpret as big-endian unsigned integer and return decimal string
+  const hex = toHex(sixteen);
+  const decimal = BigInt("0x" + hex).toString();
+  return decimal;
 }
 
 function getSeedFromEnv(): Uint8Array {

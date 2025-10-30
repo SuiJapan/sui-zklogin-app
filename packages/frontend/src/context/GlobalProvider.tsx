@@ -92,7 +92,10 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
     // Sui ClientのgetLatestSuiSystemStateメソッドを呼び出す
     const { epoch } = await suiClient.getLatestSuiSystemState();
     setCurrentEpoch(epoch);
-    setMaxEpoch(Number(epoch) + 10);
+    const nextMax = Number(epoch) + 10;
+    setMaxEpoch(nextMax);
+    // リダイレクト後のズレ防止のため保存
+    window.sessionStorage.setItem("demo_max_epoch", String(nextMax));
   };
 
   /**
@@ -139,6 +142,12 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
     );
     if (randomnessFromSession) {
       setRandomness(randomnessFromSession);
+    }
+
+    // セッションストレージから maxEpoch を復元
+    const maxEpochFromSession = window.sessionStorage.getItem("demo_max_epoch");
+    if (maxEpochFromSession) {
+      setMaxEpoch(Number(maxEpochFromSession));
     }
   }, []);
 
@@ -329,14 +338,18 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
         const token = oauthParams?.id_token as string;
         const res = await axios.post<{ salt: string }>("/hkdf", { token });
         const rawSalt = res.data.salt;
-        // HKDFがhexを返す場合に備えて10進文字列へ正規化
-        const normalizedSalt = /^[0-9a-fA-F]+$/.test(rawSalt)
-          ? BigInt(`0x${rawSalt}`).toString()
-          : String(rawSalt);
+        // サーバは10進文字列を返す設計。もし将来HEXが来ても安全に判定する
+        // ルール: 0-9のみ=decimal, 0x/0X開始=hex, それ以外の[a-f]含む=hex
+        let normalizedSalt: string;
+        if (/^0x[0-9a-fA-F]+$/.test(rawSalt) || /^[0-9a-fA-F]+$/.test(rawSalt) && /[a-fA-F]/.test(rawSalt)) {
+          normalizedSalt = BigInt(rawSalt.startsWith("0x") ? rawSalt : `0x${rawSalt}`).toString();
+        } else if (/^[0-9]+$/.test(rawSalt)) {
+          normalizedSalt = rawSalt; // already decimal
+        } else {
+          normalizedSalt = String(rawSalt);
+        }
         setUserSalt(normalizedSalt);
-        // maxEpoch は最新エポックに基づき計算
-        const { epoch } = await suiClient.getLatestSuiSystemState();
-        setMaxEpoch(Number(epoch) + 10);
+        // maxEpoch は事前にnonce計算で使用した値（セッション復元済み）をそのまま使う
       } catch (error) {
         console.error("Failed to initialize zkLogin data:", error);
         const errorMessage =

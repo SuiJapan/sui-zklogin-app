@@ -41,7 +41,7 @@ export function TransactionExecuteButton({
       loading={executingTxn}
       variant="contained"
       color="primary"
-      disabled={!decodedJwt}
+      disabled={!decodedJwt || !zkProof || !userSalt}
       sx={{
         py: 1.5,
         fontSize: "1rem",
