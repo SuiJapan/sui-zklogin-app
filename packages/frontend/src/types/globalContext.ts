@@ -1,6 +1,5 @@
 import type { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
 import type { getZkLoginSignature } from "@mysten/zklogin";
-import { Session, User } from "@supabase/supabase-js";
 import type { JwtPayload } from "jwt-decode";
 import type queryString from "query-string";
 import { createContext } from "react";
@@ -30,9 +29,7 @@ export interface GlobalContextType {
   fetchingZKProof: boolean;
   executingTxn: boolean;
   executeDigest: string;
-  user: User | null;
-  session: Session | null;
-  loading: boolean;
+  // Supabase 依存を排除したため user/session/loading は削除
 
   // State setters
   setCurrentEpoch: (value: string) => void;
@@ -50,9 +47,7 @@ export interface GlobalContextType {
   setFetchingZKProof: (value: boolean) => void;
   setExecutingTxn: (value: boolean) => void;
   setExecuteDigest: (value: string) => void;
-  setUser: (value: User | null) => void;
-  setSession: (value: Session | null) => void;
-  setLoading: (value: boolean) => void;
+  // Supabase 依存を排除したため setters も削除
 
   // Methods
   resetState: () => void;

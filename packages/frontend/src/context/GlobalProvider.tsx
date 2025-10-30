@@ -5,7 +5,6 @@ import {
   getExtendedEphemeralPublicKey,
   jwtToAddress,
 } from "@mysten/zklogin";
-import type { Session, User } from "@supabase/supabase-js";
 import axios from "axios";
 import { Buffer } from "buffer";
 import type { JwtPayload } from "jwt-decode";
@@ -57,9 +56,7 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
   const [randomness, setRandomness] = useState("");
   const [activeStep] = useState(0);
 
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Supabase依存を削除
   const [fetchingZKProof, setFetchingZKProof] = useState(false);
   const [executingTxn, setExecutingTxn] = useState(false);
   const [executeDigest, setExecuteDigest] = useState("");
@@ -423,9 +420,7 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
     fetchingZKProof,
     executingTxn,
     executeDigest,
-    user,
-    session,
-    loading,
+    // Supabase由来の state は削除済み
 
     // State setters
     setCurrentEpoch,
@@ -443,9 +438,7 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
     setFetchingZKProof,
     setExecutingTxn,
     setExecuteDigest,
-    setUser,
-    setSession,
-    setLoading,
+    // Supabase由来の setters は削除済み
 
     // Methods
     resetState,
