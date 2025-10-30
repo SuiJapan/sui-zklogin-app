@@ -101,11 +101,8 @@ async function deriveHkdfSalt(seedBytes: Uint8Array, saltBytes: Uint8Array, info
     key,
     128,
   );
-  // Ensure the big-endian integer takes exactly 16 bytes (avoid leading 0x00)
+  // Interpret as big-endian 16-byte unsigned integer and return decimal string (no bit forcing)
   const sixteen = bits instanceof Uint8Array ? bits : new Uint8Array(bits);
-  // Force 16-byte minimal representation: set highest bit to ensure >= 2^127
-  sixteen[0] |= 0x80;
-  // Interpret as big-endian unsigned integer and return decimal string
   const hex = toHex(sixteen);
   const decimal = BigInt("0x" + hex).toString();
   return decimal;
