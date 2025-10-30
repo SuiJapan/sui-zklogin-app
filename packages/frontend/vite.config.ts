@@ -8,4 +8,15 @@ export default defineConfig(({ mode }) => ({
   esbuild: {
     drop: mode === "production" ? ["console", "debugger"] : [],
   },
+  server: {
+    port: 3000,
+    host: '0.0.0.0',
+    strictPort: true,
+    proxy: {
+      "/hkdf": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+    },
+  },
 }));

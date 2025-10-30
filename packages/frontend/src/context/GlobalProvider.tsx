@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { suiClient } from "../lib/suiClient";
-import { supabase } from "../lib/supabaseClient";
+// Supabase依存を廃止（サーバ側HKDFへ切替）
 import type {
   GlobalContextType,
   PartialZkLoginSignature,
@@ -59,7 +59,7 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
 
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [fetchingZKProof, setFetchingZKProof] = useState(false);
   const [executingTxn, setExecutingTxn] = useState(false);
   const [executeDigest, setExecuteDigest] = useState("");
@@ -298,98 +298,21 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
     fetchZkProofCallback,
   ]);
 
-  useEffect(() => {
-    setLoading(true);
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+  // Supabaseのセッション監視は廃止
 
   /**
    * zkLoginデータをSupabaseに保存する関数
    * @param userId
    * @returns
    */
-  const saveZkLoginData = useCallback(
-    async (userId: string, userSalt: string, maxEpoch: number) => {
-      console.log("zkLoginデータをSupabaseに保存/更新する関数開始");
-      // Supabaseにデータを保存/更新
-      const { error } = await supabase.from("profiles").upsert(
-        {
-          id: crypto.randomUUID(),
-          sub: userId,
-          user_salt: userSalt,
-          max_epoch: maxEpoch,
-        },
-        {
-          onConflict: "sub",
-          ignoreDuplicates: false,
-        },
-      );
-
-      if (error) {
-        console.error("Failed to save zkLogin data:", error);
-        throw new Error(`Failed to save zkLogin data: ${error.message}`);
-      }
-    },
-    [],
-  );
+  // Supabase保存は廃止
 
   /**
    * zkLoginデータをSupabaseから取得する関数
    * @param userId
    * @returns
    */
-  const fetchZkLoginData = useCallback(
-    async (
-      userId: string,
-    ): Promise<{ user_salt: string; max_epoch: number } | null> => {
-      try {
-        console.log("supabaseへの登録処理開始");
-        // Supabaseからデータを取得
-        // ここではユーザーソルトとmaxEpochを取得する
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("user_salt, max_epoch")
-          .eq("sub", userId)
-          .single();
-
-        console.log("Fetched zkLogin data:", data);
-
-        // データを取得できなかった場合は新規に登録する
-        if (!data) {
-          const { epoch } = await suiClient.getLatestSuiSystemState();
-          const newMaxEpoch = Number(epoch) + 10;
-          const newUserSalt = generateRandomness();
-          // supabase側にデータを登録する
-          await saveZkLoginData(userId, newUserSalt, newMaxEpoch);
-          return { user_salt: newUserSalt, max_epoch: newMaxEpoch };
-        }
-
-        if (error) {
-          if (error === "PGRST116") {
-            // データなし
-            return null;
-          }
-          throw new Error(`Database error: ${error}`);
-        }
-
-        return data;
-      } catch (error) {
-        console.error("Failed to fetch zkLogin data:", error);
-        throw error;
-      }
-    },
-    [saveZkLoginData],
-  );
+  // Supabase取得は廃止
 
   // Location の監視（OAuth パラメータの取得）
   useEffect(() => {
@@ -403,28 +326,15 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
      * zkLoginの認証処理に必要なデータを処理するためのメソッド
      * @param userId
      */
-    const initializeZkLoginData = async (userId: string) => {
+    const initializeZkLoginData = async () => {
       try {
-        // supabaseからユーザーソルトとmaxEpochを取得
-        const fetchedData = await fetchZkLoginData(userId);
-
-        let currentSalt = "";
-        if (fetchedData?.user_salt) {
-          // 既存のデータがある場合
-          currentSalt = fetchedData.user_salt;
-          setMaxEpoch(fetchedData.max_epoch);
-        } else {
-          // ユーザーソルトを新規生成
-          currentSalt = generateRandomness();
-          // エポック数を取得
-          const { epoch } = await suiClient.getLatestSuiSystemState();
-          const newMaxEpoch = Number(epoch) + 10;
-
-          // supabaseに保存する
-          await saveZkLoginData(userId, currentSalt, newMaxEpoch);
-          setMaxEpoch(newMaxEpoch);
-        }
-        setUserSalt(currentSalt);
+        // バックエンドのHKDFから salt を取得
+        const token = oauthParams?.id_token as string;
+        const res = await axios.post<{ salt: string }>("/hkdf", { token });
+        setUserSalt(res.data.salt);
+        // maxEpoch は最新エポックに基づき計算
+        const { epoch } = await suiClient.getLatestSuiSystemState();
+        setMaxEpoch(Number(epoch) + 10);
       } catch (error) {
         console.error("Failed to initialize zkLogin data:", error);
         const errorMessage =
@@ -443,13 +353,10 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
 
       console.log("Decoded JWT:", decodedJwt);
 
-      // supabaseへ認証情報を保管する
-      if (decodedJwt.sub) {
-        // initializeZkLoginDataメソッドを呼び出す(zkLoginの認証処理に必要なデータを取得/保存する - Supabaseと連携)。
-        initializeZkLoginData(decodedJwt.sub);
-      }
+      // salt はバックエンドHKDFから取得
+      initializeZkLoginData();
     }
-  }, [oauthParams, fetchZkLoginData, saveZkLoginData]);
+  }, [oauthParams]);
 
   /**
    * ログアウトしてステート変数の値をリセットするメソッド

@@ -2,5 +2,11 @@
   "workspaces": [
     "packages/frontend",
     "packages/backend"
-  ]
+  ],
+  "scripts": {
+    "dev": "SEED=${SEED:-testseed} concurrently -n backend,frontend -c blue,magenta \"bun run --filter salt start\" \"bun run --filter zklogin-demo dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
 }
