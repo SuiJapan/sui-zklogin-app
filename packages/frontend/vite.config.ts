@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => ({
     drop: mode === "production" ? ["console", "debugger"] : [],
   },
   server: {
-    port: 3000,
+    port: 5173,
     host: '0.0.0.0',
     strictPort: true,
     proxy: {

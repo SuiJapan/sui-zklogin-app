@@ -17,13 +17,15 @@ export function useZKLogin() {
   } = context;
 
   /**
-   * Starts the zkLogin process by generating the necessary initial values.
-   * The rest of the flow is handled by useEffects in GlobalProvider.
+   * Google OAuth を開く直前に必要な値（鍵ペア・エポック・ランダムネス）を生成する。
+   * これらがそろうと GlobalProvider 側の useEffect が nonce を作り、OAuth リダイレクトを実行する。
    */
   const startLogin = useCallback(async () => {
-    // 一時鍵ペア、エポック数取得、ランダムネス生成を行う
+    // zkLogin で使い捨てる鍵ペアを生成し、sessionStorage に保持
     generateEphemeralKeyPair();
+    // 現在の epoch を取得し、nonce 計算や maxEpoch に使用
     await fetchCurrentEpoch();
+    // nonce に混ぜるランダムネスを生成
     generateRandomnessValue();
   }, [generateEphemeralKeyPair, fetchCurrentEpoch, generateRandomnessValue]);
 
