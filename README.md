@@ -9,6 +9,41 @@
 
 ---
 
+# zkLogin のキホン
+
+Web3 を触ったことがない人が最初にぶつかる壁は、「ウォレットを作って、シードフレーズや秘密鍵を自分で管理しなければならない」という点です。  
+zkLogin は、この手間を無くすために Sui ブロックチェーンが実装した仕組みで、Google などの Web2 アカウントでそのまま Web3 にログインできるようにします。
+
+主な特徴は次のとおりです。（もっと深く知りたい方は [Haruki さんの記事](https://zenn.dev/mashharuki/articles/sui_zklogin_1#1.-openid-connect-(oidc)-%E3%81%A8-json-web-token-(jwt)) も併せてどうぞ）
+
+- **いつもの Google アカウントでログイン**  
+  OAuth（OpenID Connect）を利用し、普段使っているアカウントで dApp にサインインできます。
+- **秘密鍵の管理が不要**  
+  dApp 側でセッションごとに「一時的な鍵ペア」を生成・廃棄するので、利用者は鍵を保存したり覚えたりする必要がありません。
+- **プライバシー保持**  
+  ゼロ知識証明（ZKP）によって「本人確認済みであること」だけを Sui に伝え、メールアドレスなどの個人情報はブロックチェーンに載りません。
+
+### 仕組みをもう少しだけ詳しく
+
+1. **一時的な鍵ペアと nonce を生成**  
+   アプリはセッション開始時に使い捨ての秘密鍵・公開鍵と nonce（使い捨てトークン）を作ります。これでリプレイ攻撃を防止します。
+
+2. **Google のログイン画面で本人確認**  
+   OAuth フローを通じてログインすると、Google から署名付きの JWT（JSON Web Token）が返ってきます。これは改ざんできない「本人確認書類」のようなものです。
+
+3. **ソルトと JWT から Sui アドレスを導出**  
+   JWT に含まれるユーザー ID（sub）に、バックエンドが管理する「ユーザーソルト」を組み合わせて Sui アドレスを作成します。ソルトのおかげで Google アカウントとウォレットが 1 対 1 で結び付かず、プライバシーが守られます。
+
+4. **ゼロ知識証明を生成**  
+   JWT や一時公開鍵、ソルトなどの情報を Mysten Labs の Prover API に送り、ZK 証明を作ってもらいます。これで「有効な JWT を持っていて、その JWT に自分の一時公開鍵が含まれている」と証明できます。
+
+5. **トランザクションに署名して送信**  
+   4 で得た ZK 証明と一時鍵を使って、Sui のトランザクションに zkLogin 署名を付け、ネットワークへ送信します。
+
+この流れにより、Google のログイン体験と Sui のウォレット操作が安全に接続され、Web2 と同じくらいの手軽さで Web3 を体験できるようになります。
+
+---
+
 ## 1️⃣ 事前インストール（15 分）
 
 | 必須ツール | 推奨バージョン | インストール方法 |
@@ -134,40 +169,36 @@ bun run dev
 1. `bun run dev` を起動し `http://localhost:5173/` を開く  
 2. 「Sign in with Google」→ OAuth フロー → ID トークンを取得  
 3. 画面にウォレットアドレスが表示されたら **1 SUI 送金ボタン** を試す  
-4. 続けて **NFT ミント** を試し、成功時に表示されるトランザクション digest を SuiScan で確認  
-5. 途中で詰まったら Snackbar（画面右下の通知）とブラウザコンソールのエラーを確認
+4. 途中で詰まったら Snackbar（画面右下の通知）とブラウザコンソールのエラーを確認
 
 ---
 
-## 8️⃣ うまくいかないときのチェックポイント
+## 8️⃣ 実装コードで流れを把握しよう
 
-| 症状 | 確認すること |
-|------|--------------|
-| `redirect_uri_mismatch` | Google Cloud Console に `http://localhost:5173/` を登録したか |
-| `/hkdf` が 401/400 | `packages/backend/.env` の `EXPECTED_AUD` とクライアント ID が一致しているか |
-| ZK Proof が生成されない | Prover API の URL がブロックされていないか、ブラウザの DevTools でネットワークエラーを確認 |
-| 送金が失敗 | Devnet のガス残高が足りないかも。Faucet から SUI を補充する |
+このリポジトリのフロントエンドでは、次のファイルが zkLogin フローの中心になっています。
 
----
+- `packages/frontend/src/hooks/useZKLogin.ts` → ボタン操作からフローを開始するためのカスタムフック。
+- `packages/frontend/src/context/GlobalProvider.tsx` → ハンズオン全体の状態管理（鍵生成・JWT 解析・salt 取得・ZK Proof リクエストなど）。
+- `packages/frontend/src/hooks/useSui.ts` → 取得した ZK Proof を使って Sui のトランザクションを実行する処理。
 
-## 9️⃣ Devnet Faucet（必要に応じて）
+ハンズオンでは、この README の手順を踏みつつ上記のファイルを読み進めると、コード上での段取りが理解しやすくなります。
 
-Sui CLI をインストール済みの方は、以下で Devnet に接続＆ガス補充ができます。
+具体的な流れ（コード中のコメントも参照してください）：
 
-```bash
-sui client new-env --alias devnet --rpc https://fullnode.devnet.sui.io:443 --faucet https://faucet.devnet.sui.io/gas
-sui client switch --env devnet
-sui client faucet
-```
+1. `useZKLogin.ts` の `startLogin` が呼ばれると、一時鍵・ランダムネス・最新エポックを取得。ここで `nonce` を作る準備が整います。
+2. `GlobalProvider.tsx` が `nonce` の準備を検知して Google OAuth へリダイレクト。戻ってきた `id_token` を JWT として解析します。
+3. `GlobalProvider.tsx` がバックエンド `/hkdf` へ JWT を送り、Salt を受け取って Sui アドレスを算出。Mysten の Prover API から ZK Proof も取得します。
+4. UI の送金ボタンなどから `useSui.ts` の関数を呼び出すと、`genAddressSeed` + `getZkLoginSignature` で zkLogin 署名を生成し、Sui ネットワークへ送信します。
 
-ブラウザのみで参加する場合は、画面の「Faucet」リンクから Web UI を開いて補給できます。
+各ファイルには今回追記したコメントで要点を説明しているので、ハンズオン中にコードと README を行き来しながら確認してみてください。
 
 ---
 
-## 10️⃣ さらに学びたい人へ
+## 9️⃣ さらに学びたい人へ
 
 - [zkLogin Integration Guide (公式ドキュメント)](https://docs.sui.io/guides/developer/cryptography/zklogin-integration)
 - [Sui Faucet (Devnet)](https://faucet.sui.io/?network=devnet)
 - [Mysten zkLogin GitHub](https://github.com/MystenLabs)
+- [Haruki さんによるわかりやすい解説記事](https://zenn.dev/mashharuki/articles/sui_zklogin_1#1.-openid-connect-(oidc)-%E3%81%A8-json-web-token-(jwt))
 
 改善提案や質問があれば Issue / PR を歓迎します。楽しいハンズオンにしましょう！

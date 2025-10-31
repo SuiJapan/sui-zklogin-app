@@ -63,6 +63,7 @@ export function useSui() {
         }
 
         setExecutingTxn(true);
+        // ガスオブジェクトから送金額を切り出し、検証用アドレスへ送金する TxBlock を構築
         const txb = new TransactionBlock();
         // 送金用の額を指定
         const [coin] = txb.splitCoins(txb.gas, [MIST_PER_SUI * 1n]);
@@ -76,7 +77,7 @@ export function useSui() {
         // トランザクションに署名する
         const { bytes, signature: userSignature } = await txb.sign({
           client: suiClient,
-          // This must be the same ephemeral key pair used in the ZKP requests
+          // ZK Proof で使用したエフェメラル鍵と同じものを使う必要がある
           signer: ephemeralKeyPair,
         });
 
@@ -84,7 +85,7 @@ export function useSui() {
           return;
         }
 
-        // アドレスシードを生成する
+        // salt + JWT の sub / aud からアドレスシードを生成
         const addressSeed: string = genAddressSeed(
           BigInt(userSalt),
           "sub",
@@ -92,7 +93,7 @@ export function useSui() {
           decodedJwt.aud as string,
         ).toString();
 
-        // ZKLoginを利用したトランザクション署名データを生成する
+        // Prover から受け取った zkProof とアドレスシードを合成し、ZKLogin 署名を生成
         const zkLoginSignature: SerializedSignature = getZkLoginSignature({
           inputs: {
             ...zkProof,
@@ -187,7 +188,7 @@ export function useSui() {
         return;
       }
 
-      // アドレスシードを生成する
+      // 同じ手順でアドレスシードを算出
       const addressSeed: string = genAddressSeed(
         BigInt(userSalt),
         "sub",
@@ -195,7 +196,7 @@ export function useSui() {
         decodedJwt.aud as string,
       ).toString();
 
-      // ZKLoginを利用したトランザクション署名データを生成する
+      // ZKLogin署名でトランザクションに署名
       const zkLoginSignature: SerializedSignature = getZkLoginSignature({
         inputs: {
           ...zkProof,
